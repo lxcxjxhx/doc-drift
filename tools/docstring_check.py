@@ -157,6 +157,31 @@ def kwargs_forwarded(node):
     return names
 
 
+def kwargs_blind(node):
+    """True when `**kwargs` is handed to another call, whole or unpacked.
+
+    Two shapes count, both of which accept every documented option and hand it on:
+    `super().__init__(*args, **kwargs)` (unpacked) and
+    `self.options = self.parse_options(kwargs)` (the dict passed along, which is how
+    harbor's environment classes resolve 20 documented sandbox options). Neither is
+    drift. A body that only pulls one key out of `**kwargs` and ignores the rest is
+    a different case, and the selftest pins that negative one.
+    """
+    a = node.args
+    if a.kwarg is None:
+        return False
+    name = a.kwarg.arg
+    for sub in ast.walk(node):
+        if not isinstance(sub, ast.Call):
+            continue
+        if any(isinstance(x, ast.Name) and x.id == name for x in sub.args):
+            return True
+        for kw in sub.keywords:
+            if kw.arg is None and isinstance(kw.value, ast.Name) and kw.value.id == name:
+                return True
+    return False
+
+
 def has_overload(tree, name):
     """True when the module declares this name with `@overload` at least once."""
     for n in ast.walk(tree):
@@ -198,12 +223,16 @@ def check_file(path):
                 and not a.kwonlyargs and has_overload(tree, node.name)):
             continue
         kwargs_names = kwargs_forwarded(node)
-        # `self` / `cls` are receivers: documenting them is a style choice, not drift.
-        stale = [n for n in documented_params(doc)
-                 if n.lstrip("*") not in params and n.lstrip("*") not in ("self", "cls")
-                 and n.lstrip("*") not in kwargs_names]
-        if stale:
-            out.append((path, node.lineno, node.name, "args", stale))
+        # A function that hands its `**kwargs` on to another call accepts every documented
+        # name (`super().__init__(*args, **kwargs)`, `self.parse_options(kwargs)`); any
+        # "documented but not in the signature" finding there is noise.
+        if not kwargs_blind(node):
+            # `self` / `cls` are receivers: documenting them is a style choice, not drift.
+            stale = [n for n in documented_params(doc)
+                     if n.lstrip("*") not in params and n.lstrip("*") not in ("self", "cls")
+                     and n.lstrip("*") not in kwargs_names]
+            if stale:
+                out.append((path, node.lineno, node.name, "args", stale))
         # a function that documents Returns but never returns a value
         if (has_returns(doc) and not is_abstract(node)
                 and not any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(node))

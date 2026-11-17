@@ -28,6 +28,8 @@ from pathlib import Path
 FENCE = re.compile(r"^( {0,3})(`{3,}|~{3,})(.*)$")
 HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 SKIP_DIRS = {".git", "node_modules", ".next", "public", ".venv", "venv", "__pycache__"}
+# A changelog repeats `Added`/`Fixed` under every release heading by design.
+CHANGELOG_LIKE = {"CHANGELOG.md", "CHANGELOG.mdx", "CHANGELOG.rst", "CHANGES.md", "HISTORY.md"}
 
 
 def scan(path):
@@ -99,11 +101,16 @@ def cmd_dup(root, cap):
     files = 0
     groups = []
     acknowledged = 0
+    structural = 0
     for p in walk(root):
+        name = os.path.basename(str(p))
+        if name in CHANGELOG_LIKE:
+            continue
+        heads = scan(p)[1]
         seen = {}
-        for line, _lvl, text in scan(p)[1]:
+        for line, lvl, text in heads:
             key = text.strip().lower()
-            seen.setdefault(key, []).append(line)
+            seen.setdefault(key, []).append((line, lvl))
         dups = {k: v for k, v in seen.items() if len(v) > 1}
         if not dups:
             continue
@@ -118,15 +125,34 @@ def cmd_dup(root, cap):
             if numbered and numbered <= linked:
                 dups.pop(k)
                 acknowledged += 1
+                continue
+            # The same sub-heading under *different* parents is a repeated structure, not
+            # an ambiguous anchor: an ADR with one `#### Pros` per option, a changelog with
+            # one `### Fixed` per release, a gallery with one `Key Requirements:` per entry.
+            parents = {_parent_of(heads, line, lvl) for line, lvl in dups[k]}
+            if len(parents) == len(dups[k]) and len(parents) > 1:
+                dups.pop(k)
+                structural += 1
         if dups:
             files += 1
             groups.append((rel(p), dups))
     n = sum(len(d) for _p, d in groups)
     print(f"root={rel(root) or '.'}  files-with-dup-heading={files}  dup-groups={n}  "
-          f"acknowledged-by-anchor={acknowledged}")
+          f"acknowledged-by-anchor={acknowledged}  repeated-under-different-parents={structural}")
     for src, dups in groups[:cap]:
         for k, lines in list(dups.items())[:6]:
-            print(f"   {src}  x{len(lines)}  {k!r}  lines={lines}")
+            print(f"   {src}  x{len(lines)}  {k!r}  lines={[ln for ln, _ in lines]}")
+
+
+def _parent_of(heads, line, level):
+    """Text of the nearest heading above `line` with a level lower than `level`."""
+    parent = ""
+    for h_line, h_level, h_text in heads:
+        if h_line >= line:
+            break
+        if h_level < level:
+            parent = h_text.strip().lower()
+    return parent
 
 
 def find_pair(repo):

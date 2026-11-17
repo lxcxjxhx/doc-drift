@@ -79,30 +79,35 @@ $ for f in tools/*.py; do grep -q '^def selftest' "$f" && python "$f" selftest; 
   away from; those pages are not scanned for stale imports.
 - A flag that belongs to another program (`gh release create --notes-file`, `pip install
   --force-reinstall`, `uvicorn --forwarded-allow-ips`) cannot be resolved from this repository.
+- The same sub-heading under *different* parents is a repeated structure, not an ambiguous anchor:
+  one `#### Pros` per option in an ADR (32 groups in agent-framework), one `Key Requirements:` per
+  integration, one `### Fixed` per release. Only a repeat inside the same section is reported.
+- Two headings the author already disambiguated — a table of contents linking `#usage` **and**
+  `#usage-1` — are counted separately as `acknowledged-by-anchor`.
+- A template (`adr-template.md`, `spec-template.md`) links a numbered document that does not exist
+  yet; that link is the template's shape, not a broken reference.
 
 ## Measured on real repositories
 
-Fourteen checkers, run against repositories this author had no part in writing. A `0` here means
-"ran and found nothing", which is the only way to tell that apart from "did not look".
+Fourteen checkers, run against six repositories in three ecosystems (C, Python, TypeScript). A `0`
+means "ran and found nothing", which is the only way to tell that apart from "did not look".
 
-| checker | thc-hydra | llm-compressor | torchtitan | python-sdk |
-|---|---:|---:|---:|---:|
-| docstrings · triage · doctags | 0 | 0 | 0 | 0 |
-| anchors · doc links · doc/code refs · doc commands | 0 | 0 | 0 | 0 |
-| doc/code tokens · bilingual (parity, structure, headings) | 0 | 0 | 0 | 0 |
-| md tables | 0 | **1** | 0 | 0 |
-| md duplicates | 0 | **2** | 0 | 0 |
-| md fences | 0 | 0 | 0 | 0 |
+| repository | first pass | after triage | what happened |
+|---|---:|---:|---|
+| `vanhauser-thc/thc-hydra` | 0 | 0 | — |
+| `pytorch/torchtitan` | 1 | 0 | duplicate heading the document's own ToC already disambiguates |
+| `modelcontextprotocol/python-sdk` | 80 | 0 | generated `docs/api/` tree, staged `i18n/` trees, and a migration guide that names old paths |
+| `vllm-project/llm-compressor` | 4 | 0 | one real (**PR #3526**), plus headings repeated under different parents |
+| `microsoft/agent-framework` | 42 | 0 | one real (**PR #10400**), plus 32 structural repeats and 3 template placeholder links |
+| `pipecat-ai/pipecat` | 9 | 0 | `CHANGELOG` release headings |
 
-The three non-zero cells are the honest part of the table:
+Two upstream fixes came out of this table, and both are the same size: a table row with four cells
+under a three-column header, and a heading written twice in a row. The rest of the 136 first-pass
+findings were the checker being wrong, and each one changed the checker rather than the repository.
 
-- `md tables` — a support-matrix row in `examples/autoround/README.md` had four cells under a
-  three-column header. Fixed upstream.
-- `md duplicates` — two `#### Evaluate Accuracy` headings under different model sections. Left alone:
-  renaming a heading changes a published anchor, which belongs to the maintainers.
-- `torchtitan` scored a duplicate too until the checker learned to notice that the file's own table of
-  contents links `#usage` **and** `#usage-1`. When the disambiguation is already written down, it is
-  not drift — that case is now reported separately as `acknowledged-by-anchor`.
+That ratio is the honest headline. A rule that only ever finds things is not measuring; it is
+guessing. What makes these usable is that every false-positive class above is now a named rule with
+a fixture, so the next repository hits it deliberately instead of by accident.
 
 ## What this is not
 

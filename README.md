@@ -127,6 +127,11 @@ $ for f in tools/*.py; do grep -q '^def selftest' "$f" && python "$f" selftest; 
   `#usage-1` — are counted separately as `acknowledged-by-anchor`.
 - A template (`adr-template.md`, `spec-template.md`) links a numbered document that does not exist
   yet; that link is the template's shape, not a broken reference.
+- Under `mkdocs.yml`, `docs/` is rendered by python-markdown, which **collapses hyphen runs**: `Docker / production`
+  is `docker-production` there and `docker--production` on GitHub. Applying one rule to both made 18 correct
+  cross-file anchors look dead in agenticos.
+- mkdocs `attr_list` also writes the id with spaces — `## Settings { #settings }` — and accepting only `{#id}`
+  reported **every** cross-file anchor in that repository.
 - A **label row** in a compact table — `| Time: |` between the header and the body, used to introduce
   a group in oneDNN's `knobs_perf_report.md` — has fewer cells than the header on purpose. Counting
   cells cannot tell a label row from a broken row, so the table checker's output needs a human look

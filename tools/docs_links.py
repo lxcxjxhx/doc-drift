@@ -60,6 +60,8 @@ def scan(root, only=None):
                     # lives in `document/public/imgs/x.png`.
                     if t.startswith("/") and _web_root_hit(dirpath, t, root):
                         continue
+                    if _asset_root_hit(dirpath, t, root):
+                        continue
                     if only and not norm(tgt).startswith(only):
                         continue
                     # A target inside a staged or generated tree exists in the built site,
@@ -86,8 +88,17 @@ def selftest():
     import tempfile
 
     d = tempfile.mkdtemp(prefix="links_")
-    os.makedirs(os.path.join(d, "docs"))
-    os.makedirs(os.path.join(d, "public", "imgs"))
+    # A bare `images/x.png` that lives in the site's asset directory is resolved by the
+    # build, not by the page's own folder (DefectDojo: 3502 references, 440 names, all
+    # present under docs/assets/images).
+    os.makedirs(os.path.join(d, "docs", "assets", "images"), exist_ok=True)
+    open(os.path.join(d, "docs", "assets", "images", "a.png"), "wb").close()
+    os.makedirs(os.path.join(d, "docs", "guide"), exist_ok=True)
+    with open(os.path.join(d, "docs", "guide", "g.md"), "w", encoding="utf-8") as f:
+        f.write("# g" + chr(10) + chr(10) + "![x](images/a.png)" + chr(10) + chr(10)
+                + "![y](images/nope.png)" + chr(10))
+    os.makedirs(os.path.join(d, "docs"), exist_ok=True)
+    os.makedirs(os.path.join(d, "public", "imgs"), exist_ok=True)
     open(os.path.join(d, "public", "imgs", "x.png"), "wb").close()
     with open(os.path.join(d, "docs", "b.md"), "w", encoding="utf-8") as f:
         f.write("# b\n")
@@ -102,7 +113,9 @@ def selftest():
             "```\n"
         )
     got = [h[1] for h in scan(d)]
-    assert got == ["missing.md"], got
+    # `images/a.png` is found under docs/assets/images and must stay quiet; `images/nope.png`
+    # is the negative case that keeps the rule from suppressing every bare image path.
+    assert got == ["missing.md", "images/nope.png"], got
     print("selftest ok:", got)
 
 
@@ -125,6 +138,35 @@ def main():
 
 
 WEB_ROOTS = ("public", "static", "assets", "docs", "")
+
+
+ASSET_DIRS = ("assets/images", "static/images", "public/images", "assets/img", "images")
+
+
+def _asset_root_hit(dirpath, target, root):
+    """True when a bare `images/x.png` lives in the site's asset directory instead.
+
+    DefectDojo has 3502 references shaped `images/<name>` in `docs/content/**` and all 440
+    distinct names sit at `docs/assets/images/<name>`. A pipeline that moves the asset
+    directory under the page tree is a convention, not 3502 typos; the link is resolved by
+    the site build, so the repo-relative miss is not a defect.
+    """
+    if not target.startswith(("images/", "img/")):
+        return False
+    rel = target.split("/", 1)[1]
+    node = os.path.abspath(dirpath)
+    root_abs = os.path.abspath(root)
+    while True:
+        for sub in ASSET_DIRS:
+            if os.path.exists(os.path.join(node, sub, rel)):
+                return True
+        if os.path.normcase(node) == os.path.normcase(root_abs):
+            break
+        parent = os.path.dirname(node)
+        if parent == node:
+            break
+        node = parent
+    return any(os.path.exists(os.path.join(root_abs, sub, rel)) for sub in ASSET_DIRS)
 
 
 def _web_root_hit(dirpath, target, root):

@@ -16,6 +16,7 @@ STYLE = os.environ.get("ANCHOR_STYLE", "github")
 # docs.json / docs/docs.json is Mintlify's marker; when present the docs tree is
 # slugged by the site, not by GitHub. Auto-detect so a plain run is correct.
 MINTLIFY = False
+MKDOCS = False
 LINK = re.compile(r"\]\(([^)\s]+)\)")
 HEADING = re.compile(r"^#{1,6}\s+(.*)$")
 
@@ -44,6 +45,12 @@ def slug(text, style="github"):
     # Do NOT strip before converting spaces: a heading like "`# contract-check: skip-install`"
     # keeps the leading dash GitHub generates (verified against the rendered README).
     t = t.rstrip().replace(" ", "-")
+    if style == "python-markdown":
+        # mkdocs (python-markdown) *collapses* runs of hyphens and spaces, so
+        # "## Docker / production" is `docker-production` there and `docker--production`
+        # on GitHub. Applying GitHub rules to a docs/ tree under mkdocs.yml made 18 of
+        # agenticos' correct cross-file anchors look dead.
+        t = re.sub(r"[-\s]+", "-", t)
     # NOTE: GitHub does not collapse consecutive hyphens: "State & Persistence"
     # becomes "state--persistence", so no extra collapsing here.
     return t
@@ -57,7 +64,9 @@ def headings(path):
     # mkdocs / python-markdown attr_list: "## 見出し {#english-id}" renders the
     # anchor as the given id, NOT as the slug of the translated heading.
     # Without this, the Japanese OpenAI Agents docs produced 25 false positives.
-    ATTR = re.compile(r"\{#([^}\s]+)\}")
+    # Some repositories write the id with spaces inside the braces: `## Settings { #settings }`.
+    # Accepting only `{#id}` made 1677 cross-file anchors in one mkdocs repository look dead.
+    ATTR = re.compile(r"\{\s*#([^}\s]+)\s*\}")
     try:
         for line in open(path, encoding="utf-8", errors="replace"):
             for m2 in IDATTR.finditer(line):
@@ -75,7 +84,13 @@ def headings(path):
             # Files under docs/ are rendered by the docs site (Mintlify);
             # everything else is rendered by GitHub, whatever ANCHOR_STYLE says.
             posix = path.replace(os.sep, "/")
-            style = "mintlify" if MINTLIFY and (posix.startswith("docs/") or "/docs/" in posix) else "github"
+            under_docs = posix.startswith("docs/") or "/docs/" in posix
+            if MINTLIFY and under_docs:
+                style = "mintlify"
+            elif MKDOCS and under_docs:
+                style = "python-markdown"
+            else:
+                style = "github"
             s = slug(m.group(1), style)
             if s in seen:
                 seen[s] += 1
@@ -117,9 +132,10 @@ def main():
         print(__doc__)
         return
     root = sys.argv[1].rstrip("/\\")
-    global MINTLIFY
+    global MINTLIFY, MKDOCS
     MINTLIFY = os.path.exists(os.path.join(root, "docs.json")) or os.path.exists(
         os.path.join(root, "docs", "docs.json"))
+    MKDOCS = os.path.exists(os.path.join(root, "mkdocs.yml")) or         os.path.exists(os.path.join(root, "mkdocs.yaml"))
     cap = int(sys.argv[sys.argv.index("--max") + 1]) if "--max" in sys.argv else 30
 
     cache, bad = {}, []

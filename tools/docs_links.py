@@ -7,6 +7,7 @@ Only reports links/images whose resolved target is inside --only-prefix (so spar
 clones and links that legitimately point outside the docs tree do not create noise).
 """
 import os
+import re
 import sys
 import urllib.parse
 
@@ -62,6 +63,8 @@ def scan(root, only=None):
                         continue
                     if _asset_root_hit(dirpath, t, root):
                         continue
+                    if "_static/" in t and _sphinx_static_hit(t, root):
+                        continue
                     if only and not norm(tgt).startswith(only):
                         continue
                     # A target inside a staged or generated tree exists in the built site,
@@ -112,10 +115,27 @@ def selftest():
             "[code example](nope.md)\n"
             "```\n"
         )
+    # Sphinx serves `_static/...` from `html_static_path`, not from two levels above the
+    # page. IsaacLab writes `../../_static/visualizers/x.jpg` for a file that lives at
+    # `docs/source/_static/visualizers/x.jpg`; I filed and retracted a PR on this once.
+    nl = chr(10)
+    d2 = tempfile.mkdtemp(prefix="sphinx_")
+    os.makedirs(os.path.join(d2, "docs", "source", "_static", "img"), exist_ok=True)
+    os.makedirs(os.path.join(d2, "docs", "source", "how-to"), exist_ok=True)
+    open(os.path.join(d2, "docs", "source", "_static", "img", "a.jpg"), "wb").close()
+    with open(os.path.join(d2, "docs", "conf.py"), "w", encoding="utf-8") as f:
+        f.write("html_static_path = ['source/_static']" + nl)
+    with open(os.path.join(d2, "docs", "source", "how-to", "x.rst"),
+              "w", encoding="utf-8") as f:
+        f.write('<img src="../../_static/img/a.jpg">' + nl
+                + '<img src="../../_static/img/nope.jpg">' + nl)
+    sphinx_hits = [h[1] for h in scan(d2)]
+
     got = [h[1] for h in scan(d)]
     # `images/a.png` is found under docs/assets/images and must stay quiet; `images/nope.png`
     # is the negative case that keeps the rule from suppressing every bare image path.
     assert got == ["missing.md", "images/nope.png"], got
+    assert sphinx_hits == ["../../_static/img/nope.jpg"], sphinx_hits
     print("selftest ok:", got)
 
 
@@ -141,6 +161,40 @@ WEB_ROOTS = ("public", "static", "assets", "docs", "")
 
 
 ASSET_DIRS = ("assets/images", "static/images", "public/images", "assets/img", "images")
+
+
+def _sphinx_static_roots(root):
+    """Directories named by `html_static_path` in a Sphinx `conf.py`, resolved to paths.
+
+    Sphinx serves `_static/...` from the configured static path, not from the folder two
+    levels above the page. IsaacLab's `docs/source/how-to/*.rst` writes
+    `../../_static/visualizers/x.jpg` while the file sits at `docs/source/_static/...`,
+    which is what `html_static_path = ["source/_static"]` means; resolving by relative path
+    alone reported 13 correct renders as broken (and I previously filed and then retracted a
+    PR on exactly this).
+    """
+    out = []
+    for dirpath, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in SKIP]
+        if "conf.py" not in files:
+            continue
+        conf = os.path.join(dirpath, "conf.py")
+        try:
+            text = open(conf, encoding="utf-8", errors="replace").read()
+        except OSError:
+            continue
+        m = re.search(r"html_static_path\s*=\s*\[(.*?)\]", text, re.S)
+        if not m:
+            continue
+        for entry in re.findall(r"""['"]([^'"]+)['"]""", m.group(1)):
+            out.append(os.path.join(dirpath, entry))
+    return out
+
+
+def _sphinx_static_hit(target, root):
+    """True when the `_static/...` tail of a link exists under a configured static root."""
+    tail = target.split("_static/", 1)[1]
+    return any(os.path.exists(os.path.join(base, tail)) for base in _sphinx_static_roots(root))
 
 
 def _asset_root_hit(dirpath, target, root):

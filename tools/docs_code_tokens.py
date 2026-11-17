@@ -45,6 +45,21 @@ def walk(root, exts):
             yield p
 
 
+# Bounded window: the mention line and one either side. Wide enough for a sentence
+# that wraps, narrow enough that one sentence cannot silence a whole section.
+REMOVED = re.compile(
+    r"(?i)\b(?:removed|no longer|does nothing|has no effect|deprecated|not used|"
+    r"intentionally no|there is no)\b"
+    # The same sentence in the languages this project publishes docs in. Without them the
+    # English page is filtered and the translations are not, so the hit merely moves to the
+    # German file — which is exactly what happened on agenticos.
+    r"|entfernt|nicht mehr|wirkungslos|veraltet"
+    r"|eliminad|ya no|sin efecto|obsolet"
+    r"|usuni\u0119|nie jest ju\u017c|bez efektu|przestarza"
+    r"|已移除|不再|无效"
+)
+
+
 def scan(root):
     """Return (env-not-in-code, flag-not-in-code) as {token: first doc that mentions it}."""
     root = Path(root)
@@ -57,17 +72,27 @@ def scan(root):
     env_seen, flag_seen = {}, {}
     for doc in docs:
         text = doc.read_text(encoding="utf-8", errors="replace")
+        # A page that names a variable only to say it was removed is not promising it:
+        # agenticos writes "`AI_FRAMEWORK` … were removed … setting them now does nothing",
+        # and deer-flow writes "there is intentionally no `make migrate` target". Only the
+        # mention line and one either side count, so one sentence cannot silence a section.
+        removed = {i for i, line in enumerate(text.splitlines()) if REMOVED.search(line)}
+
+        def near_removal(token):
+            line_no = next((i for i, line in enumerate(text.splitlines()) if token in line), -1)
+            return any(abs(line_no - j) <= 2 for j in removed)
+
         for name in ENV.findall(text):
             if name in {"README", "MIT", "APACHE", "GPU", "CPU", "API", "URL", "HTTP",
                         "HTTPS", "JSON", "YAML", "TRUE", "FALSE", "NONE"}:
                 continue
-            if name not in code:
+            if name not in code and not near_removal(name):
                 env_seen.setdefault(name, doc.relative_to(root).as_posix())
         no_urls = re.sub(r"https?://\S+", "", text)
         for flag in FLAG.findall(no_urls):
             if flag.lstrip("-") in declared:
                 continue
-            if flag not in code:
+            if flag not in code and not near_removal(flag):
                 flag_seen.setdefault(flag, doc.relative_to(root).as_posix())
     return env_seen, flag_seen
 
@@ -92,6 +117,16 @@ def selftest():
     env, flag = scan(d)
     assert list(env) == ["MISSING_VAR"], env
     assert list(flag) == ["--gone-flag"], flag
+    # A name the page says was removed is not a promise, and the window is bounded: a
+    (Path(d) / "gone.md").write_text(
+        "`OLD_VAR` was removed and setting it does nothing." + chr(10)
+        + chr(10) * 3
+        + "Set `FRESH_VAR` to enable it." + chr(10),
+        encoding="utf-8",
+    )
+    env2, _flag2 = scan(d)
+    assert "OLD_VAR" not in env2, env2
+    assert "FRESH_VAR" in env2, env2
     print(f"selftest ok  env={list(env)} flags={list(flag)}")
 
 
@@ -101,32 +136,11 @@ def main():
         return
     root = Path(sys.argv[1])
     show = "--show" in sys.argv
-    docs = [p for p in walk(root, {".md", ".mdx", ".rst"})]
-    code_files = list(walk(root, CODE_EXT))
-    code = "\n".join(
-        p.read_text(encoding="utf-8", errors="replace") for p in code_files
-    )
-    # Flags declared as API strings (cobra/pflag: Flags().Bool("hidethinking")) are
-    # real flags but never appear as `--name` in source.
-    declared = set(re.findall(r'Flags?\(\)\.[A-Za-z]+\(\s*"([a-z][a-z0-9-]+)"', code))
-    env_seen, flag_seen = {}, {}
-    for doc in docs:
-        text = doc.read_text(encoding="utf-8", errors="replace")
-        for name in ENV.findall(text):
-            if name in {"README", "MIT", "APACHE", "GPU", "CPU", "API", "URL", "HTTP",
-                        "HTTPS", "JSON", "YAML", "TRUE", "FALSE", "NONE"}:
-                continue
-            if name not in code:
-                env_seen.setdefault(name, doc.relative_to(root).as_posix())
-        # URLs contain `--` in fragments (…readme#libraries--sdks) and are not flags.
-        no_urls = re.sub(r"https?://\S+", "", text)
-        for flag in FLAG.findall(no_urls):
-            if flag.lstrip("-") in declared:
-                continue
-            if flag not in code:
-                flag_seen.setdefault(flag, doc.relative_to(root).as_posix())
-    print(f"{root.name}: docs={len(docs)} code={len(code_files)} "
-          f"env-not-in-code={len(env_seen)} flags-not-in-code={len(flag_seen)}")
+    # `scan` is the only implementation. This function used to repeat the whole loop, and a
+    # filter added to one copy silently did nothing for the other; the counts printed here
+    # and the ones the selftest asserted came from different code.
+    env_seen, flag_seen = scan(root)
+    print(f"{root.name}: env-not-in-code={len(env_seen)} flags-not-in-code={len(flag_seen)}")
     for label, table in (("env", env_seen), ("flag", flag_seen)):
         for name, src in sorted(table.items()):
             if show:

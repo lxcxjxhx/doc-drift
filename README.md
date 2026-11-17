@@ -1,3 +1,5 @@
+[![ci](https://github.com/lxcxjxhx/doc-drift/actions/workflows/ci.yml/badge.svg)](https://github.com/lxcxjxhx/doc-drift/actions/workflows/ci.yml)
+
 # doc-drift
 
 Small checkers that find **documentation that has stopped being true**: docstrings describing

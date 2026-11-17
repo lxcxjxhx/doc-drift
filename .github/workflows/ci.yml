@@ -1,0 +1,62 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  selftest:
+    name: py${{ matrix.python }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      # No dependencies on purpose: if this step ever needs `pip install`, the
+      # "stdlib-only" promise in the README has quietly stopped being true.
+      - name: no third-party imports
+        shell: bash
+        run: |
+          if grep -rnE "^(import|from) (requests|yaml|click|rich|numpy|pandas)\b" tools/; then
+            echo "::error::a checker started importing a third-party package"; exit 1
+          fi
+
+      - name: per-checker selftests
+        shell: bash
+        run: |
+          # Run the entry point only where the source declares one. Passing `selftest` to a
+          # checker that has no entry point makes it treat the word as a path and exit 1,
+          # which would read as a failing test rather than as "no test here".
+          fail=0; ran=0; skipped=""
+          for f in tools/*.py; do
+            name=$(basename "$f" .py)
+            [ "$name" = "run_all" ] && continue
+            if ! grep -q "^def selftest" "$f"; then skipped="$skipped $name"; continue; fi
+            ran=$((ran+1))
+            if ! out=$(python "$f" selftest 2>&1); then
+              echo "::error file=$f::$name selftest failed"; echo "$out"; fail=1
+            else
+              echo "$out" | tail -1
+            fi
+          done
+          echo "ran=$ran  no-selftest:$skipped"
+          exit $fail
+
+      - name: run the whole set against the fixtures
+        run: python tools/run_all.py --selftest
+
+      - name: run the whole set against this repository
+        shell: bash
+        run: |
+          python tools/run_all.py . | tee report.md
+          # the fixtures deliberately contain one stale docstring; anything more is a regression
+          test "$(grep -c '^| docstrings | 1 |' report.md)" = "1"

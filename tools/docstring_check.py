@@ -204,6 +204,16 @@ def walk(root):
                 yield os.path.join(dp, f)
 
 
+def _fixture(name):
+    """Locate a fixture whether the tools sit beside `fixtures/` or beside `_data/fixtures/`."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for rel in (("..", "fixtures", name), ("..", "_data", "fixtures", name)):
+        p = os.path.join(here, *rel)
+        if os.path.exists(p):
+            return p
+    raise FileNotFoundError(name)
+
+
 def selftest():
     import tempfile
 
@@ -311,14 +321,12 @@ def selftest():
         ("numpy_style", "args", ("old",)),
         ("stale", "args", ("gone",)),
     ], kinds
-    fixture = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          "..", "_data", "fixtures", "numpy_sections.py")
+    fixture = _fixture("numpy_sections.py")
     np_found = [(f[2], f[3], tuple(f[4])) for f in check_file(fixture)]
     assert np_found == [("numpy_stale", "args", ("gone",))], np_found
     assert [h for h in np_found if h[0] == "numpy_sections"] == [], np_found
     assert [h for h in np_found if h[0] == "list_style_args"] == [], np_found
-    none_fixture = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                "..", "_data", "fixtures", "numpydoc_none.py")
+    none_fixture = _fixture("numpydoc_none.py")
     none_found = [(f[2], f[3], tuple(f[4])) for f in check_file(none_fixture)]
     assert none_found == [], none_found
     print(f"selftest ok  found={kinds}  numpy={np_found}")

@@ -20,6 +20,43 @@ $ python tools/docs_links.py /path/to/repo --only-prefix docs
 line, and it refuses to guess arguments: the two placeholder tools need a repository-specific
 locale layout, so they are listed as *not run* unless you pass `--all`.
 
+## Try it on your repository
+
+Three commands, no dependencies, nothing installed:
+
+```console
+$ git clone --depth 1 https://github.com/lxcxjxhx/doc-drift
+$ cd doc-drift
+$ python tools/run_all.py /path/to/your/repo
+```
+
+A run against this repository itself, trimmed:
+
+```
+| checker | findings | summary |
+|---|---:|---|
+| docstrings | 1 | root=doc-drift  files=16  stale-args=1 |
+| doc/code tokens | 0 | docs=1 code=17 env-not-in-code=0 flags-not-in-code=5 |
+| md duplicates | 0 | files-with-dup-heading=0  ...  repeated-under-different-parents=0 |
+| doc commands | 0 | commands-in-docs=0 not found in a manifest |
+```
+
+The one finding is deliberate: `fixtures/` contains a stale docstring so a parser regression shows
+up as a red build rather than as a quiet false negative.
+
+**Reading the result.** A `0` means "ran and found nothing"; the summary column is there so you can
+tell that apart from "did not look" (e.g. `no locale pair found` means the bilingual checkers had
+nothing to compare). `not run` lists the two checkers that need repository-specific arguments —
+`--all` opts in.
+
+**Focus a check.** Each tool also runs alone, and the two that walk whole trees take a path filter:
+
+```console
+$ python tools/docstring_check.py path/to/pkg            # one package
+$ python tools/docs_links.py . --only-prefix docs        # only links into docs/
+$ python tools/docs_task_refs.py . --show                # every make/npm/compose reference
+```
+
 ## What each one finds
 
 | Tool | Finding |

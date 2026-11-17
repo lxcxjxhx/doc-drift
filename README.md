@@ -101,6 +101,9 @@ means "ran and found nothing", which is the only way to tell that apart from "di
 | `microsoft/agent-framework` | 42 | 0 | one real (**PR #10400**), plus 32 structural repeats and 3 template placeholder links |
 | `pipecat-ai/pipecat` | 9 | 0 | `CHANGELOG` release headings |
 
+(One observation, dated 2026-11-17 — the figures above are a snapshot, not a live count; the two checkers
+that produce them are in the campaign repository, not here.)
+
 Two upstream fixes came out of this table, and both are the same size: a table row with four cells
 under a three-column header, and a heading written twice in a row. The rest of the 136 first-pass
 findings were the checker being wrong, and each one changed the checker rather than the repository.

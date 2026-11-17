@@ -47,7 +47,36 @@ def rels(base, lang):
     return out
 
 
+def selftest():
+    """A page with no counterpart is reported in both directions; directories the
+    checker skips (images) never show up as drift."""
+    import tempfile
+
+    d = tempfile.mkdtemp(prefix="par_")
+    for lang in ("en", "zh"):
+        os.makedirs(os.path.join(d, "docs", lang, "images"), exist_ok=True)
+        os.makedirs(os.path.join(d, "docs", lang, "guide"), exist_ok=True)
+    write = lambda p, t="x": open(p, "w", encoding="utf-8", newline="\n").write(t)
+    write(os.path.join(d, "docs", "en", "guide", "intro.md"))
+    write(os.path.join(d, "docs", "zh", "guide", "intro.md"))
+    write(os.path.join(d, "docs", "en", "guide", "extra.md"))
+    write(os.path.join(d, "docs", "zh", "guide", "other.md"))
+    write(os.path.join(d, "docs", "en", "images", "shot.md"))
+    pair = find_locale_root(d)
+    assert pair is not None, "no locale pair found"
+    base, en, zh = pair
+    E, Z = rels(base, en), rels(base, zh)
+    only_zh, only_en = sorted(Z - E), sorted(E - Z)
+    assert only_zh == ["guide/other.md"], only_zh
+    assert only_en == ["guide/extra.md"], only_en
+    assert not any("images" in p for p in only_en + only_zh)
+    print(f"selftest ok  only_en={only_en} only_zh={only_zh}")
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "selftest":
+        selftest()
+        return
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(0)

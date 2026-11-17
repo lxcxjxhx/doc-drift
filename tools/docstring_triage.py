@@ -75,7 +75,59 @@ def scan_repo(root, limit=40, verbose=True):
     return tally, rows
 
 
+def selftest():
+    """Three functions the docstring checker flags: one reads the name out of **kwargs
+    (consumed, not a defect), one forwards **kwargs (ambiguous), one does neither
+    (real drift). Getting the first two wrong is what makes this tool noisy."""
+    import tempfile
+
+    d = tempfile.mkdtemp(prefix="triage_")
+    path = Path(d) / "m.py"
+    path.write_text(
+        'def consumed(a, **kwargs):\n'
+        '    """Do it.\n'
+        '\n'
+        '    Args:\n'
+        '        a (int): first.\n'
+        '        process (obj): read back out.\n'
+        '    """\n'
+        '    return kwargs.get("process")\n'
+        '\n'
+        'def forwarded(a, **kwargs):\n'
+        '    """Do it.\n'
+        '\n'
+        '    Args:\n'
+        '        a (int): first.\n'
+        '        process (obj): passed along.\n'
+        '    """\n'
+        '    return helper(**kwargs)\n'
+        '\n'
+        'def real(a):\n'
+        '    """Do it.\n'
+        '\n'
+        '    Args:\n'
+        '        a (int): first.\n'
+        '        gone (int): removed.\n'
+        '    """\n'
+        '    return a\n',
+        encoding="utf-8")
+    tally, rows = scan_repo(d, verbose=False)
+    verdicts = {r[2]: r[4] for r in rows}
+    # `docstring_check` already drops names the body reads back out of **kwargs, so the
+    # "consumed" branch is unreachable from this layer — that is the layering working,
+    # and the fixture asserts it rather than pretending the branch was exercised.
+    assert "consumed" not in verdicts, verdicts
+    assert tally["ambiguous"] == 1, tally
+    assert tally["real"] == 1, tally
+    assert verdicts["real"] == "REAL drift", verdicts
+    print(f"selftest ok  real={tally['real']} ambiguous={tally['ambiguous']} "
+          f"(kwargs-read case filtered upstream)")
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "selftest":
+        selftest()
+        return 0
     if len(sys.argv) < 2:
         print(__doc__)
         return 1

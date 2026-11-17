@@ -23,7 +23,54 @@ def cells(line):
     return SPLIT.split(s)
 
 
+def _scan(root):
+    bad = []
+    for p in sorted(glob.glob(os.path.join(root, "**", "*.md*"), recursive=True)):
+        try:
+            lines = open(p, encoding="utf-8", errors="replace").read().split("\n")
+        except OSError:
+            continue
+        in_code, i = False, 0
+        while i < len(lines):
+            l = lines[i].strip()
+            if l.startswith("```"):
+                in_code = not in_code
+                i += 1
+                continue
+            if in_code or not l.startswith("|"):
+                i += 1
+                continue
+            width = len(cells(l))
+            j = i + 1
+            while j < len(lines) and lines[j].strip().startswith("|"):
+                row = lines[j].strip()
+                n = len(cells(row))
+                if n != width:
+                    bad.append((os.path.relpath(p, root), j + 1, width, n, row[:80]))
+                j += 1
+            i = j
+    return bad
+
+
+def selftest():
+    """A short row is a defect; a table inside a fence, or a row with an escaped pipe, is not."""
+    import tempfile
+
+    d = tempfile.mkdtemp(prefix="mdt_")
+    with open(os.path.join(d, "bad.md"), "w", encoding="utf-8", newline="\n") as f:
+        f.write("| a | b |\n|---|---|\n| 1 | 2 | 3 |\n")
+    with open(os.path.join(d, "ok.md"), "w", encoding="utf-8", newline="\n") as f:
+        f.write("```\n| not | a | table |\n```\n\n")
+        f.write("| x | y |\n|---|---|\n| a \\| b | c |\n")
+    hits = [(src, ln) for src, ln, w, n, _ in _scan(d)]
+    assert hits == [("bad.md", 3)], hits
+    print(f"selftest ok  hits={hits}")
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "selftest":
+        selftest()
+        return
     if len(sys.argv) < 2:
         print(__doc__)
         return

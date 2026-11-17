@@ -35,7 +35,38 @@ def load(path):
     return out
 
 
+def compare(base, other):
+    """[(key, missing_placeholders, extra_placeholders)] for keys both files define."""
+    diffs = []
+    for k, v in base.items():
+        if k not in other:
+            continue
+        bp, op = set(PH.findall(v)), set(PH.findall(other[k]))
+        if bp != op:
+            diffs.append((k, sorted(bp - op), sorted(op - bp)))
+    return diffs
+
+
+def selftest():
+    """A dropped `{count}` is reported; a key only one file has, or one whose
+    placeholders merely reorder, is not."""
+    import tempfile
+
+    d = tempfile.mkdtemp(prefix="loc_")
+    with open(os.path.join(d, "en.ts"), "w", encoding="utf-8", newline="\n") as f:
+        f.write('export default {\n  "rows": "{count} rows",\n  "name": "Hi {who}",\n'
+                '  "only.en": "{x}"\n};\n')
+    with open(os.path.join(d, "zh.ts"), "w", encoding="utf-8", newline="\n") as f:
+        f.write('export default {\n  "rows": "共 行",\n  "name": "{who}你好",\n};\n')
+    diffs = compare(load(os.path.join(d, "en.ts")), load(os.path.join(d, "zh.ts")))
+    assert diffs == [("rows", ["count"], [])], diffs
+    print(f"selftest ok  diffs={diffs}")
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "selftest":
+        selftest()
+        return
     if len(sys.argv) < 2:
         print(__doc__)
         return
@@ -50,14 +81,7 @@ def main():
         if not os.path.exists(p):
             print(f"  {o}: missing")
             continue
-        other = load(p)
-        diffs = []
-        for k, v in b.items():
-            if k not in other:
-                continue
-            bp, op = set(PH.findall(v)), set(PH.findall(other[k]))
-            if bp != op:
-                diffs.append((k, sorted(bp - op), sorted(op - bp)))
+        diffs = compare(b, load(p))
         total += len(diffs)
         print(f"  {o}: {len(diffs)} placeholder mismatches")
         for k, miss, extra in diffs[:10]:

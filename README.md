@@ -55,6 +55,15 @@ same way:
 NumPy-style one — so a regression in the parser shows up as a failing fixture rather than as a quiet
 false negative.
 
+Every checker also ships `selftest`, which asserts **both directions**: the defect it exists to find,
+and the near-miss it must stay quiet about (a `**kwargs` name that is read back, a table inside a
+fenced block, a token that only appears inside a URL, a key whose placeholders merely reorder).
+Run them all:
+
+```console
+$ for f in tools/*.py; do grep -q '^def selftest' "$f" && python "$f" selftest; done
+```
+
 ## False positives this project refuses to ship
 
 - A parameter the body reads out of `**kwargs` is not stale.

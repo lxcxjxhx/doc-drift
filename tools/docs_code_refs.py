@@ -116,12 +116,9 @@ def local_packages(root: Path):
     return names
 
 
-def main():
-    if len(sys.argv) < 2:
-        print(__doc__)
-        return
-    root = Path(sys.argv[1])
-    cap = int(sys.argv[sys.argv.index("--max") + 1]) if "--max" in sys.argv else 20
+def scan(root):
+    """Return (doc, line, module, name) for own-package imports the package cannot satisfy."""
+    root = Path(root)
     index = ModuleIndex(root)
     local = local_packages(root)
 
@@ -140,8 +137,6 @@ def main():
             for node in ast.walk(tree):
                 if not isinstance(node, ast.ImportFrom) or not node.module or node.level:
                     continue
-                # Only judge imports of this repository's own packages; a doc page is
-                # allowed to import transformers, vllm, dataclasses, ...
                 if node.module.split(".")[0] not in local:
                     continue
                 path = index.find(node.module)
@@ -157,11 +152,48 @@ def main():
                 for alias in node.names:
                     if alias.name == "*" or alias.name in defined:
                         continue
-                    # `from pkg import submodule` is a package/module import, not a
-                    # missing symbol: `from vllm import ir` resolves to vllm/ir/.
                     if index.find(f"{node.module}.{alias.name}") is not None:
                         continue
                     hits.append((doc, line_no + (node.lineno or 0) - 1, node.module, alias.name))
+    return hits
+
+
+def selftest():
+    """An own-package symbol the module no longer defines is reported; a real one, a
+    submodule import, and a third-party import are not."""
+    import tempfile
+
+    d = Path(tempfile.mkdtemp(prefix="dcr_"))
+    pkg = d / "pkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("def ok():\n    return 1\n", encoding="utf-8")
+    (pkg / "sub.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (d / "guide.md").write_text(
+        "```python\n"
+        "from pkg import ok\n"
+        "from pkg import sub\n"
+        "import requests\n"
+        "```\n\n"
+        "```python\n"
+        "from pkg import gone\n"
+        "```\n",
+        encoding="utf-8",
+    )
+    hits = [(doc.name, mod, name) for doc, _ln, mod, name in scan(d)]
+    assert hits == [("guide.md", "pkg", "gone")], hits
+    print(f"selftest ok  hits={hits}")
+
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "selftest":
+        selftest()
+        return
+    if len(sys.argv) < 2:
+        print(__doc__)
+        return
+    root = Path(sys.argv[1])
+    cap = int(sys.argv[sys.argv.index("--max") + 1]) if "--max" in sys.argv else 20
+    hits = scan(root)
 
     print(f"== {root}  doc-import mismatches: {len(hits)}")
     for doc, line, mod, name in hits[:cap]:

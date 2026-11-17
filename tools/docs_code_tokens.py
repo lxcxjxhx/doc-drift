@@ -45,7 +45,60 @@ def walk(root, exts):
             yield p
 
 
+def scan(root):
+    """Return (env-not-in-code, flag-not-in-code) as {token: first doc that mentions it}."""
+    root = Path(root)
+    docs = [p for p in walk(root, {".md", ".mdx", ".rst"})]
+    code_files = list(walk(root, CODE_EXT))
+    code = "\n".join(
+        p.read_text(encoding="utf-8", errors="replace") for p in code_files
+    )
+    declared = set(re.findall(r'Flags?\(\)\.[A-Za-z]+\(\s*"([a-z][a-z0-9-]+)"', code))
+    env_seen, flag_seen = {}, {}
+    for doc in docs:
+        text = doc.read_text(encoding="utf-8", errors="replace")
+        for name in ENV.findall(text):
+            if name in {"README", "MIT", "APACHE", "GPU", "CPU", "API", "URL", "HTTP",
+                        "HTTPS", "JSON", "YAML", "TRUE", "FALSE", "NONE"}:
+                continue
+            if name not in code:
+                env_seen.setdefault(name, doc.relative_to(root).as_posix())
+        no_urls = re.sub(r"https?://\S+", "", text)
+        for flag in FLAG.findall(no_urls):
+            if flag.lstrip("-") in declared:
+                continue
+            if flag not in code:
+                flag_seen.setdefault(flag, doc.relative_to(root).as_posix())
+    return env_seen, flag_seen
+
+
+def selftest():
+    """A token the code never reads is reported; a token it does read, one declared as a
+    cobra string, and one that only appears inside a URL are not."""
+    import tempfile
+
+    d = tempfile.mkdtemp(prefix="dct_")
+    (Path(d) / "README.md").write_text(
+        "Set `MISSING_VAR` to enable it, or `KNOWN_VAR` to keep it.\n"
+        "Run `--gone-flag` to break, `--known-flag` to work, `--declared-flag` too.\n"
+        "Docs: https://example.com/page#libraries--sdks\n",
+        encoding="utf-8",
+    )
+    (Path(d) / "app.py").write_text(
+        "import os\nos.environ['KNOWN_VAR']\nparser.add_argument('--known-flag')\n"
+        "parser.Flags().Bool(\"declared-flag\", False)\n",
+        encoding="utf-8",
+    )
+    env, flag = scan(d)
+    assert list(env) == ["MISSING_VAR"], env
+    assert list(flag) == ["--gone-flag"], flag
+    print(f"selftest ok  env={list(env)} flags={list(flag)}")
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "selftest":
+        selftest()
+        return
     root = Path(sys.argv[1])
     show = "--show" in sys.argv
     docs = [p for p in walk(root, {".md", ".mdx", ".rst"})]

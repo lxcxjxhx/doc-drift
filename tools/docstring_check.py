@@ -157,6 +157,19 @@ def kwargs_forwarded(node):
     return names
 
 
+def has_overload(tree, name):
+    """True when the module declares this name with `@overload` at least once."""
+    for n in ast.walk(tree):
+        if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) or n.name != name:
+            continue
+        for d in n.decorator_list:
+            target = d.func if isinstance(d, ast.Call) else d
+            if getattr(target, "id", None) == "overload" or \
+                    getattr(target, "attr", None) == "overload":
+                return True
+    return False
+
+
 def check_file(path):
     try:
         src = open(path, encoding="utf-8", errors="replace").read()
@@ -177,6 +190,13 @@ def check_file(path):
         params = {x.arg for x in a.posonlyargs + a.args + a.kwonlyargs}
         params |= {x.arg for x in (a.vararg, a.kwarg) if x is not None}
         params -= {"self", "cls"}
+        # The implementation `def f(*args, **kwargs)` above a set of `@overload`s takes its
+        # real signature from the overloads, so the docstring documents parameters the body
+        # never names. agno's `insert_many` and `tool` are exactly this shape.
+        positional = [x.arg for x in a.posonlyargs + a.args if x.arg not in ("self", "cls")]
+        if (a.vararg is not None and a.kwarg is not None and not positional
+                and not a.kwonlyargs and has_overload(tree, node.name)):
+            continue
         kwargs_names = kwargs_forwarded(node)
         # `self` / `cls` are receivers: documenting them is a style choice, not drift.
         stale = [n for n in documented_params(doc)
@@ -329,6 +349,11 @@ def selftest():
     none_fixture = _fixture("numpydoc_none.py")
     none_found = [(f[2], f[3], tuple(f[4])) for f in check_file(none_fixture)]
     assert none_found == [], none_found
+    # An implementation that is `*args, **kwargs` above `@overload`s documents the overload
+    # signature; reporting it as drift was agno's `insert_many` and `tool`.
+    over_fixture = _fixture("kwargs_not_read.py")
+    over_found = [(f[2], f[3], tuple(f[4])) for f in check_file(over_fixture)]
+    assert over_found == [], over_found
     print(f"selftest ok  found={kinds}  numpy={np_found}")
 
 

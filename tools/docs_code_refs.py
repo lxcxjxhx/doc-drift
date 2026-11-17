@@ -19,6 +19,8 @@ from pathlib import Path
 
 SKIP_DIRS = {".git", ".agents", ".claude", "node_modules", ".venv", "build", "dist", "__pycache__", "third_party", "third-party"}
 FENCE = re.compile(r"```(?:python|py)[ \t]*\n(.*?)```", re.S)
+# Pages that exist to name symbols which no longer exist are not defects.
+MIGRATION = re.compile(r"(?i)^(migration|migrating|upgrad\w*|changelog|changes|release-notes)\b")
 
 
 def source_modules(root: Path):
@@ -125,6 +127,10 @@ def scan(root):
     hits = []
     for doc in root.rglob("*"):
         if doc.suffix not in (".md", ".mdx", ".rst") or any(p in SKIP_DIRS for p in doc.parts):
+            continue
+        # A migration guide names the *old* module paths on purpose; that is its job.
+        # Changelogs do the same for the release that moved them.
+        if MIGRATION.match(doc.name):
             continue
         text = doc.read_text(encoding="utf-8", errors="replace")
         for m in FENCE.finditer(text):

@@ -13,6 +13,11 @@ import urllib.parse
 SKIP = {".git", ".claude", ".agents", "node_modules", "target", "build", "dist", ".venv", "__pycache__", ".next"}
 EXT = (".md", ".mdx", ".rst")
 TARGET_EXT = (".md", ".mdx", ".rst", ".png", ".jpg", ".jpeg", ".svg", ".gif", ".py", ".ipynb")
+# Trees whose pages are staged or generated before the site is built: a link into them is
+# correct in the output and absent from the source. `i18n/<code>/pages/` is the shape a
+# translation pipeline uses (English tree + overlay); `docs/api/` is mkdocstrings output.
+STAGED = ("i18n",)
+GENERATED_NAMES = {"api"}
 
 
 def norm(p):
@@ -56,6 +61,13 @@ def scan(root, only=None):
                     if t.startswith("/") and _web_root_hit(dirpath, t, root):
                         continue
                     if only and not norm(tgt).startswith(only):
+                        continue
+                    # A target inside a staged or generated tree exists in the built site,
+                    # not in the source checkout: skip it rather than call it broken.
+                    parts = norm(tgt).split("/")
+                    if any(part in STAGED for part in parts):
+                        continue
+                    if any(part in GENERATED_NAMES for part in parts):
                         continue
                     hits.append((norm(os.path.relpath(p, root)), t, tgt))
 

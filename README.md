@@ -72,6 +72,13 @@ $ for f in tools/*.py; do grep -q '^def selftest' "$f" && python "$f" selftest; 
 - A dead link inside archived meeting minutes is not a defect — rewriting history is not a fix.
 - A URL that answers 404 to `HEAD` and 200 to `GET` is alive; probe with a browser `GET` before
   reporting.
+- A link into a tree the site *generates* (`docs/api/` from mkdocstrings) or *stages* before
+  building (`i18n/<code>/pages/`) points at a page that exists in the output and not in the
+  checkout. Both are skipped by path.
+- A migration guide or changelog names the symbols and module paths it is telling you to move
+  away from; those pages are not scanned for stale imports.
+- A flag that belongs to another program (`gh release create --notes-file`, `pip install
+  --force-reinstall`, `uvicorn --forwarded-allow-ips`) cannot be resolved from this repository.
 
 ## What this is not
 

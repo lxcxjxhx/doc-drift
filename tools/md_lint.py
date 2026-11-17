@@ -23,6 +23,7 @@ import os
 import re
 import sys
 import tempfile
+from pathlib import Path
 
 FENCE = re.compile(r"^( {0,3})(`{3,}|~{3,})(.*)$")
 HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
@@ -86,7 +87,7 @@ def cmd_fence(root, cap):
     cover = 1 - missing / total if total else 1.0
     print(f"root={os.path.basename(root)}  fences={total}  untagged={missing}  tagged={cover:.3%}")
     if total < 50 or cover < 0.98:
-        print("   convention not established (<50 blocks or <98% tagged): not a defect")
+        print("   note: convention not established (<50 blocks or <98% tagged): not a defect")
         return
     print(f"   -> repo convention is {cover:.2%} tagged; {missing} outlier(s):")
     for src, line in out[:cap]:
@@ -97,17 +98,32 @@ def cmd_dup(root, cap):
     rel = locator(root)
     files = 0
     groups = []
+    acknowledged = 0
     for p in walk(root):
         seen = {}
         for line, _lvl, text in scan(p)[1]:
             key = text.strip().lower()
             seen.setdefault(key, []).append(line)
         dups = {k: v for k, v in seen.items() if len(v) > 1}
+        if not dups:
+            continue
+        # A file whose own links point at `#slug` and `#slug-1` has already made the
+        # disambiguation explicit — GitHub's suffix is part of the document, not drift.
+        text = Path(p).read_text(encoding="utf-8", errors="replace") if not isinstance(p, Path) \
+            else p.read_text(encoding="utf-8", errors="replace")
+        linked = set(re.findall(r"\]\(#([^)\s]+)\)", text))
+        for k in list(dups):
+            slug = re.sub(r"[^\w\- ]+", "", k).strip().lower().replace(" ", "-")
+            numbered = {f"{slug}-{i}" for i in range(1, len(dups[k]))}
+            if numbered and numbered <= linked:
+                dups.pop(k)
+                acknowledged += 1
         if dups:
             files += 1
             groups.append((rel(p), dups))
     n = sum(len(d) for _p, d in groups)
-    print(f"root={rel(root) or '.'}  files-with-dup-heading={files}  dup-groups={n}")
+    print(f"root={rel(root) or '.'}  files-with-dup-heading={files}  dup-groups={n}  "
+          f"acknowledged-by-anchor={acknowledged}")
     for src, dups in groups[:cap]:
         for k, lines in list(dups.items())[:6]:
             print(f"   {src}  x{len(lines)}  {k!r}  lines={lines}")

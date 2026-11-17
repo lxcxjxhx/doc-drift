@@ -52,7 +52,12 @@ def run(root, argv, timeout=600):
         return {"label": None, "secs": timeout, "error": "timeout"}
     out = p.stdout.strip().splitlines()
     summary = next((l for l in out if l.strip()), "")
-    findings = sum(1 for l in out if l.startswith(("  ", "\t")) and l.strip())
+    # Findings are the lines after the summary. Counting the summary's own leading
+    # spaces made every checker look like it had one finding.
+    body = out[out.index(summary) + 1:] if summary in out else out
+    findings = sum(1 for l in body
+                   if l.strip() and l.startswith(("  ", "\t"))
+                   and not l.strip().startswith(("note:", "->")))
     return {"label": None, "secs": round(time.monotonic() - started, 1),
             "rc": p.returncode, "summary": summary, "findings": findings,
             "error": (p.stderr.strip().splitlines()[-1]

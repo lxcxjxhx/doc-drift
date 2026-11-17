@@ -80,6 +80,30 @@ $ for f in tools/*.py; do grep -q '^def selftest' "$f" && python "$f" selftest; 
 - A flag that belongs to another program (`gh release create --notes-file`, `pip install
   --force-reinstall`, `uvicorn --forwarded-allow-ips`) cannot be resolved from this repository.
 
+## Measured on real repositories
+
+Fourteen checkers, run against repositories this author had no part in writing. A `0` here means
+"ran and found nothing", which is the only way to tell that apart from "did not look".
+
+| checker | thc-hydra | llm-compressor | torchtitan | python-sdk |
+|---|---:|---:|---:|---:|
+| docstrings · triage · doctags | 0 | 0 | 0 | 0 |
+| anchors · doc links · doc/code refs · doc commands | 0 | 0 | 0 | 0 |
+| doc/code tokens · bilingual (parity, structure, headings) | 0 | 0 | 0 | 0 |
+| md tables | 0 | **1** | 0 | 0 |
+| md duplicates | 0 | **2** | 0 | 0 |
+| md fences | 0 | 0 | 0 | 0 |
+
+The three non-zero cells are the honest part of the table:
+
+- `md tables` — a support-matrix row in `examples/autoround/README.md` had four cells under a
+  three-column header. Fixed upstream.
+- `md duplicates` — two `#### Evaluate Accuracy` headings under different model sections. Left alone:
+  renaming a heading changes a published anchor, which belongs to the maintainers.
+- `torchtitan` scored a duplicate too until the checker learned to notice that the file's own table of
+  contents links `#usage` **and** `#usage-1`. When the disambiguation is already written down, it is
+  not drift — that case is now reported separately as `acknowledged-by-anchor`.
+
 ## What this is not
 
 Not a linter substitute and not a documentation grader: it reports *contradictions between a

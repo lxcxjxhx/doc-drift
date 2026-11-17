@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Commands the docs tell you to run, whose target does not exist.
 
+A document that names a target only to say it does not exist (`there is intentionally no
+`make migrate` target`) is matched as well; that class cannot be told apart without reading
+the sentence, so it is documented rather than filtered.
+
 `make lint` in a README is a promise. When the Makefile renames the target, the line
 stays and the next reader wastes ten minutes on `No rule to make target 'lint'`.
 
@@ -32,7 +36,11 @@ SKIP_FILES = {"CHANGELOG.md", "CHANGELOG.mdx"}
 
 FENCE = re.compile(r"```[^\n]*\n(.*?)```", re.S)
 INLINE = re.compile(r"`([^`\n]+)`")
-MAKE = re.compile(r"(?:^|[\s$])make\s+(?:-[A-Za-z-]+\s+\S+\s+)*([A-Za-z0-9_.%/-]+)")
+# `make` must start the line (possibly after `$`, a shell prompt, or indentation inside a
+# fence). Matching it anywhere made "…and make all tests pass" in a French README look like
+# a request for a `make all` target.
+MAKE = re.compile(r"^[ 	]*(?:\$\s+)?make\s+(?:-[A-Za-z-]+\s+\S+\s+)*([A-Za-z0-9_.%/-]+)",
+                  re.M)
 # Only an explicit `run` is evidence. `pnpm prettier --check` runs a binary from
 # node_modules/.bin, and a template's docs name scripts the generated project owns —
 # both are indistinguishable from a script name by shape, so the bare form is skipped.

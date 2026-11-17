@@ -113,15 +113,18 @@ def selftest():
         encoding="utf-8")
     tally, rows = scan_repo(d, verbose=False)
     verdicts = {r[2]: r[4] for r in rows}
-    # `docstring_check` already drops names the body reads back out of **kwargs, so the
-    # "consumed" branch is unreachable from this layer — that is the layering working,
-    # and the fixture asserts it rather than pretending the branch was exercised.
+    # `docstring_check` drops two shapes before this layer sees them: names the body reads
+    # back out of **kwargs, and bodies that hand **kwargs on to another call
+    # (`helper(**kwargs)`). So neither the "consumed" nor the "ambiguous" branch is
+    # reachable from here — that is the layering working, and the fixture asserts it
+    # instead of pretending those branches were exercised.
     assert "consumed" not in verdicts, verdicts
-    assert tally["ambiguous"] == 1, tally
+    assert "forwarded" not in verdicts, verdicts
+    assert tally["ambiguous"] == 0, tally
     assert tally["real"] == 1, tally
     assert verdicts["real"] == "REAL drift", verdicts
     print(f"selftest ok  real={tally['real']} ambiguous={tally['ambiguous']} "
-          f"(kwargs-read case filtered upstream)")
+          f"(kwargs-read and kwargs-forwarded cases both filtered upstream)")
 
 
 def main():

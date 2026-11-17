@@ -29,6 +29,7 @@ SPEC = [
     ("doc/code tokens", ["docs_code_tokens.py", "{root}"], False),
     ("bilingual parity", ["docs_parity.py", "{root}"], False),
     ("md tables", ["md_table_check.py", "{root}"], False),
+    ("doc commands", ["docs_task_refs.py", "{root}"], False),
     ("md fences", ["md_lint.py", "fence", "{root}"], False),  # vs the repo's own tagging convention
     ("md duplicates", ["md_lint.py", "dup", "{root}"], False),
     ("md bilingual structure", ["md_lint.py", "struct", "{root}"], False),

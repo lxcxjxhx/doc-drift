@@ -36,6 +36,7 @@ locale layout, so they are listed as *not run* unless you pass `--all`.
 | `i18n_placeholders.py` | the same comparison for a JSON locale directory laid out one namespace per file (the Next.js `i18n/<locale>/<ns>.json` shape) |
 | `i18n_placeholders.py` | the same comparison across a JSON locale directory (one namespace per file) |
 | `md_table_check.py` | table rows whose cell count differs from the header, which renders as a broken table |
+| `docs_task_refs.py` | `make <target>`, `npm run <script>` and `docker compose <cmd> <service>` lines whose target does not exist in the repository's Makefile, `package.json` scripts or compose file |
 | `md_lint.py` | four leftover dimensions: fenced blocks without a language tag (judged against the repo's own convention), the same heading repeated inside one file (which makes `#slug` ambiguous), a localized page whose heading structure drifted from its counterpart, and structure that translation never removes (code blocks, tables, images, source links) |
 
 ## The method, since it is the point

@@ -120,6 +120,8 @@ def selftest():
     # Mintlify rule: "### 3.8 Foo" -> "3-8-foo" (dots become hyphens).
     assert slug("3.8 Unified Cache (UMBP)", "mintlify") == "3-8-unified-cache-umbp"
     assert slug("3. Benchmark results", "mintlify") == "3-benchmark-results"
+    assert slug("Docker / production", "python-markdown") == "docker-production"
+    assert slug("Docker / production", "github") == "docker--production"
     assert slug("3.8 Unified Cache (UMBP)", "github") == "38-unified-cache-umbp"
     print("selftest ok:", got)
 

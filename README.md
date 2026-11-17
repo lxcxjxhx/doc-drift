@@ -9,6 +9,10 @@ importing symbols the package no longer exposes.
 Every checker here is stdlib-only Python 3.9+, takes a directory, and prints findings with
 `file:line`. No dependencies, no configuration, no daemon.
 
+Reading this cold, or deciding whether it belongs in a standards working group? Start with
+[`SUBMISSION.md`](SUBMISSION.md) — one page, including what the tool deliberately does not do.
+Release history is in [`CHANGELOG.md`](CHANGELOG.md).
+
 ```console
 $ python tools/run_all.py /path/to/repo        # every portable checker, one table
 $ python tools/docstring_check.py /path/to/repo
